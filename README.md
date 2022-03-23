@@ -25,10 +25,10 @@ npx cordova plugin add cordova-plugin-androidx
 
 ## Installation
 
-Run this command in your project root:
+Run this command in your project root to install version 3.0.7-fix:
 
 ```bash
-npx cordova plugin add cordova-plugin-mlkit-barcode-scanner
+npx cordova plugin add https://github.com/tylervz/cordova-plugin-mlkit-barcode-scanner#3.0.7-fix
 ```
 
 ## Supported Platforms
