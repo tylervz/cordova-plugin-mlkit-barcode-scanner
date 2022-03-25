@@ -17,8 +17,8 @@
 @import MLKitBarcodeScanning;
 @import UIKit;
 
-// View controller demonstraing how to use the barcode detector with the AVFoundation
-// video pipeline.
+// View controller demonstraing how to use the barcode detector with the
+// AVFoundation video pipeline.
 @protocol senddataProtocol <NSObject>
 
 - (void)closeScanner;
@@ -28,9 +28,8 @@
 
 @interface CameraViewController : UIViewController
 
-@property(nonatomic,assign)id delegate;
-@property(nonatomic,assign) NSNumber *barcodeFormats;
-@property(nonatomic,assign) CGFloat detectorSize;
+@property(nonatomic, assign) id delegate;
+@property(nonatomic, assign) NSNumber *barcodeFormats;
+@property(nonatomic, assign) CGFloat detectorSize;
 
 @end
-

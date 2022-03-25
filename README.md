@@ -11,8 +11,8 @@ The MLKit library is incredibly performant and fast in comparison to any other b
 | --------------------------------- | --------- | -------------------------- |
 | `cordova-android`                 | `>=8.0.0` |                            |
 | `cordova-ios`                     | `>=4.5.0` |                            |
-| `cordova-plugin-androidx`         | ` ^3.0.0` | If cordova-android < 9.0.0 |
-| `cordova-plugin-androidx-adapter` | ` ^1.1.3` |                            |
+| `cordova-plugin-androidx`         | `^3.0.0` | If cordova-android < 9.0.0 |
+| `cordova-plugin-androidx-adapter` | `^1.1.3` |                            |
 
 ## Prerequisites
 
@@ -168,37 +168,37 @@ A VS Code task for `build` is also included.
 
 Install cordova:
 
-```
+```bash
 npm i -g cordova
 ```
 
 Go to test app:
 
-```
+```bash
 cd test/scan-test-app
 ```
 
-Install node modules:
+Install Node.js modules:
 
-```
+```bash
 npm i
 ```
 
 Prepare Cordova:
 
-```
+```bash
 cordova prepare && cordova plugin add ../../ --link --force
 ```
 
 Build and run the project Android:
 
-```
+```bash
 cordova build android && cordova run android
 ```
 
 and iOS:
 
-```
+```bash
 cordova build ios && cordova run ios
 ```
 

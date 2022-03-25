@@ -13,7 +13,6 @@ import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.graphics.RectF;
 import android.os.Bundle;
-
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
@@ -58,30 +57,57 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * Activity for capturing a barcode with the scanner.
+ */
 public class CaptureActivity extends AppCompatActivity implements SurfaceHolder.Callback {
 
-  public Integer BarcodeFormats;
-  public double DetectorSize = .5;
+  /**
+   * All of the barcode formats we are interested in detecting, specified in a single integer.
+   * The value is the sum of all the barcode formats we want to detect,
+   * defined in {@link com.google.mlkit.vision.barcode.common.Barcode.BarcodeFormat}
+   * and our TypeScript file Detector.ts.
+   */
+  private Integer barcodeFormats;
+  /**
+   * Proportion of the screen that should be filled with a rectangular box
+   * to indicate to the user where the app is looking for barcodes.
+   * Value must be between 0 and 1.
+   */
+  private double detectorSize;
 
-  public static final String BarcodeFormat = "MLKitBarcodeFormat";
-  public static final String BarcodeType = "MLKitBarcodeType";
-  public static final String BarcodeValue = "MLKitBarcodeValue";
+  /**
+   * Constant used for setting and retrieving data in an Intent.
+   */
+  public static final String BARCODE_FORMAT = "MLKitBarcodeFormat";
+  /**
+   * Constant used for setting and retrieving data in an Intent.
+   */
+  public static final String BARCODE_TYPE = "MLKitBarcodeType";
+  /**
+   * Constant used for setting and retrieving data in an Intent.
+   */
+  public static final String BARCODE_VALUE = "MLKitBarcodeValue";
 
   private ListenableFuture<ProcessCameraProvider> cameraProviderFuture;
   private ExecutorService executor = Executors.newSingleThreadExecutor();
   private PreviewView mCameraView;
   private SurfaceHolder holder;
   private SurfaceView surfaceView;
-  private Canvas canvas;
-  private Paint paint;
 
   private static final int RC_HANDLE_CAMERA_PERM = 2;
-  private ImageButton _TorchButton;
+  private ImageButton torchButton;
   private Camera camera;
 
-  private ScaleGestureDetector _ScaleGestureDetector;
-  private GestureDetector _GestureDetector;
+  private ScaleGestureDetector scaleGestureDetector;
+  private GestureDetector gestureDetector;
 
+  /**
+   * Called when the activity is starting. This is where most initialization should go.
+   * @param savedInstanceState  If the activity is being re-initialized after previously being
+   * shut down then this Bundle contains the data it most recently supplied
+   * in onSaveInstanceState(Bundle). Note: Otherwise it is null.
+   */
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
@@ -96,11 +122,12 @@ public class CaptureActivity extends AppCompatActivity implements SurfaceHolder.
     holder.addCallback(this);
 
     // read parameters from the intent used to launch the activity.
-    BarcodeFormats = getIntent().getIntExtra("BarcodeFormats", 1234);
-    DetectorSize = getIntent().getDoubleExtra("DetectorSize", .5);
+    barcodeFormats = getIntent().getIntExtra("BarcodeFormats", 0);
+    detectorSize = getIntent().getDoubleExtra("DetectorSize", .5);
 
-    if (DetectorSize <= 0 || DetectorSize >= 1) { // setting boundary detectorSize must be between 0 to 1.
-      DetectorSize = 0.5;
+    // setting boundary detectorSize must be between 0 to 1.
+    if (detectorSize <= 0 || detectorSize >= 1) {
+      detectorSize = 0.5;
     }
 
     int rc = ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA);
@@ -112,19 +139,21 @@ public class CaptureActivity extends AppCompatActivity implements SurfaceHolder.
       requestCameraPermission();
     }
 
-    _GestureDetector = new GestureDetector(this, new CaptureGestureListener());
-    _ScaleGestureDetector = new ScaleGestureDetector(this, new ScaleListener());
+    gestureDetector = new GestureDetector(this, new CaptureGestureListener());
+    scaleGestureDetector = new ScaleGestureDetector(this, new ScaleListener());
 
-    _TorchButton = findViewById(getResources().getIdentifier("torch_button", "id", this.getPackageName()));
+    torchButton = findViewById(getResources().getIdentifier(
+        "torch_button", "id", this.getPackageName()));
 
-    _TorchButton.setOnClickListener(new View.OnClickListener() {
+    torchButton.setOnClickListener(new View.OnClickListener() {
       @Override
       public void onClick(View v) {
 
         LiveData<Integer> flashState = camera.getCameraInfo().getTorchState();
         if (flashState.getValue() != null) {
           boolean state = flashState.getValue() == 1;
-          _TorchButton.setBackgroundResource(getResources().getIdentifier(!state ? "torch_active" : "torch_inactive",
+          torchButton.setBackgroundResource(getResources().getIdentifier(
+              !state ? "torch_active" : "torch_inactive",
               "drawable", CaptureActivity.this.getPackageName()));
           camera.getCameraControl().enableTorch(!state);
         }
@@ -159,7 +188,8 @@ public class CaptureActivity extends AppCompatActivity implements SurfaceHolder.
     public void onScaleEnd(ScaleGestureDetector detector) {
 
       if (camera != null) {
-        float scale = camera.getCameraInfo().getZoomState().getValue().getZoomRatio() * detector.getScaleFactor();
+        float scale = camera.getCameraInfo().getZoomState().getValue().getZoomRatio()
+            * detector.getScaleFactor();
         camera.getCameraControl().setZoomRatio(scale);
       }
     }
@@ -167,13 +197,15 @@ public class CaptureActivity extends AppCompatActivity implements SurfaceHolder.
 
   private void requestCameraPermission() {
 
-    final String[] permissions = new String[] { Manifest.permission.CAMERA,
+    final String[] permissions = new String[] {
+        Manifest.permission.CAMERA,
         Manifest.permission.WRITE_EXTERNAL_STORAGE };
 
     boolean shouldShowPermission = !ActivityCompat.shouldShowRequestPermissionRationale(this,
         Manifest.permission.CAMERA);
     shouldShowPermission = shouldShowPermission
-        && !ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        && !ActivityCompat.shouldShowRequestPermissionRationale(
+            this, Manifest.permission.WRITE_EXTERNAL_STORAGE);
 
     if (shouldShowPermission) {
       ActivityCompat.requestPermissions(this, permissions, RC_HANDLE_CAMERA_PERM);
@@ -183,20 +215,24 @@ public class CaptureActivity extends AppCompatActivity implements SurfaceHolder.
     View.OnClickListener listener = new View.OnClickListener() {
       @Override
       public void onClick(View view) {
-        ActivityCompat.requestPermissions(CaptureActivity.this, permissions, RC_HANDLE_CAMERA_PERM);
+        ActivityCompat.requestPermissions(CaptureActivity.this, permissions,
+            RC_HANDLE_CAMERA_PERM);
       }
     };
 
-    findViewById(getResources().getIdentifier("topLayout", "id", getPackageName())).setOnClickListener(listener);
+    findViewById(getResources().getIdentifier("topLayout", "id", getPackageName()))
+        .setOnClickListener(listener);
     Snackbar
-        .make(surfaceView, getResources().getIdentifier("permission_camera_rationale", "string", getPackageName()),
-            Snackbar.LENGTH_INDEFINITE)
-        .setAction(getResources().getIdentifier("ok", "string", getPackageName()), listener).show();
+        .make(surfaceView, getResources().getIdentifier("permission_camera_rationale",
+            "string", getPackageName()), Snackbar.LENGTH_INDEFINITE)
+        .setAction(getResources().getIdentifier("ok", "string", getPackageName()), listener)
+        .show();
 
   }
 
   @Override
-  public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+  public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+      @NonNull int[] grantResults) {
     if (requestCode != RC_HANDLE_CAMERA_PERM) {
       super.onRequestPermissionsResult(requestCode, permissions, grantResults);
       return;
@@ -204,7 +240,7 @@ public class CaptureActivity extends AppCompatActivity implements SurfaceHolder.
 
     if (grantResults.length != 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
       startCamera();
-      DrawFocusRect(Color.parseColor("#FFFFFF"));
+      drawFocusRect(Color.parseColor("#FFFFFF"));
       return;
     }
 
@@ -216,47 +252,80 @@ public class CaptureActivity extends AppCompatActivity implements SurfaceHolder.
 
     AlertDialog.Builder builder = new AlertDialog.Builder(this);
     builder.setTitle("Camera permission required")
-        .setMessage(getResources().getIdentifier("no_camera_permission", "string", getPackageName()))
-        .setPositiveButton(getResources().getIdentifier("ok", "string", getPackageName()), listener).show();
+        .setMessage(getResources().getIdentifier(
+            "no_camera_permission", "string", getPackageName()))
+        .setPositiveButton(getResources().getIdentifier("ok", "string", getPackageName()),
+            listener).show();
   }
 
+  /**
+   * This is called immediately after the surface is first created.
+   * @param surfaceHolder Abstract interface to someone holding the display surface.
+   * Allows you to control the surface size and format, edit the pixels
+   * in the surface, and monitor changes to the surface.
+   */
   @Override
   public void surfaceCreated(SurfaceHolder surfaceHolder) {
 
   }
 
+  /**
+   * This is called immediately after any structural changes (format or size)
+   * have been made to the surface.
+   * @param surfaceHolder the SurfaceHolder whose surface has changed.
+   * @param i The new {@link PixelFormat} of the surface.
+   * @param i1 The new width of the surface.
+   * @param i2 The new height of the surface.
+   */
   @Override
   public void surfaceChanged(SurfaceHolder surfaceHolder, int i, int i1, int i2) {
-    DrawFocusRect(Color.parseColor("#FFFFFF"));
+    drawFocusRect(Color.parseColor("#FFFFFF"));
   }
 
+  /**
+   * This is called immediately before a surface is being destroyed.
+   * @param surfaceHolder the SurfaceHolder whose surface is being destroyed.
+   */
   @Override
   public void surfaceDestroyed(SurfaceHolder surfaceHolder) {
 
   }
 
+  /**
+   * Called when a touch screen event was not handled by any of the views under it.
+   * @param e the touch screen event being processed.
+   * @return Returns true if you have consumed the event, false if you haven't.
+   */
   @Override
   public boolean onTouchEvent(MotionEvent e) {
-    boolean b = _ScaleGestureDetector.onTouchEvent(e);
-    boolean c = _GestureDetector.onTouchEvent(e);
+    boolean b = scaleGestureDetector.onTouchEvent(e);
+    boolean c = gestureDetector.onTouchEvent(e);
 
     return b || c || super.onTouchEvent(e);
   }
 
+  /**
+   * Called as part of the activity lifecycle when the user no longer actively interacts
+   * with the activity, but it is still visible on screen. The counterpart to onResume().
+   */
   @Override
   protected void onPause() {
     super.onPause();
-
   }
 
+  /**
+   * Called after onRestoreInstanceState(Bundle), onRestart(), or onPause().
+   * This is usually a hint for your activity to start interacting with the user,
+   * which is a good indicator that the activity became active and ready to receive input.
+   */
   @Override
   protected void onResume() {
     super.onResume();
-
   }
 
-  void startCamera() {
-    mCameraView = findViewById(getResources().getIdentifier("previewView", "id", getPackageName()));
+  private void startCamera() {
+    mCameraView = findViewById(getResources().getIdentifier("previewView",
+        "id", getPackageName()));
     mCameraView.setPreferredImplementationMode(PreviewView.ImplementationMode.TEXTURE_VIEW);
 
     Boolean rotateCamera = getIntent().getBooleanExtra("RotateCamera", false);
@@ -287,27 +356,28 @@ public class CaptureActivity extends AppCompatActivity implements SurfaceHolder.
   }
 
   /**
-   * Binding to camera
+   * Binding to camera.
+   * @param cameraProvider the singleton camera provider for the Activity
    */
   private void bindPreview(ProcessCameraProvider cameraProvider) {
 
     int barcodeFormat;
-    if (BarcodeFormats == 0 || BarcodeFormats == 1234) {
+    if (barcodeFormats == 0) {
       barcodeFormat = (Barcode.FORMAT_CODE_39 | Barcode.FORMAT_DATA_MATRIX);
     } else {
-      barcodeFormat = BarcodeFormats;
+      barcodeFormat = barcodeFormats;
     }
 
     Preview preview = new Preview.Builder().build();
 
-    CameraSelector cameraSelector = new CameraSelector.Builder().requireLensFacing(CameraSelector.LENS_FACING_BACK)
-        .build();
+    CameraSelector cameraSelector = new CameraSelector.Builder()
+        .requireLensFacing(CameraSelector.LENS_FACING_BACK).build();
 
     preview.setSurfaceProvider(mCameraView.createSurfaceProvider());
 
     ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
-        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).setTargetAspectRatio(AspectRatio.RATIO_16_9)
-        .build();
+        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+        .setTargetAspectRatio(AspectRatio.RATIO_16_9).build();
 
     BarcodeScanner scanner = BarcodeScanning
         .getClient(new BarcodeScannerOptions.Builder().setBarcodeFormats(barcodeFormat).build());
@@ -326,23 +396,18 @@ public class CaptureActivity extends AppCompatActivity implements SurfaceHolder.
         int height = bmp.getHeight();
         int width = bmp.getWidth();
 
-        int left, right, top, bottom, diameter, boxHeight, boxWidth;
+        int diameter = Math.min(height, width);
 
-        diameter = width;
-        if (height < width) {
-          diameter = height;
-        }
-
-        int offset = (int) ((1 - DetectorSize) * diameter);
+        int offset = (int) ((1 - detectorSize) * diameter);
         diameter -= offset;
 
-        left = width / 2 - diameter / 2;
-        top = height / 2 - diameter / 2;
-        right = width / 2 + diameter / 2;
-        bottom = height / 2 + diameter / 2;
+        int left = width / 2 - diameter / 2;
+        int top = height / 2 - diameter / 2;
+        int right = width / 2 + diameter / 2;
+        int bottom = height / 2 + diameter / 2;
 
-        boxHeight = bottom - top;
-        boxWidth = right - left;
+        int boxHeight = bottom - top;
+        int boxWidth = right - left;
 
         Bitmap bitmap = Bitmap.createBitmap(bmp, left, top, boxWidth, boxHeight);
         scanner.process(InputImage.fromBitmap(bitmap, image.getImageInfo().getRotationDegrees()))
@@ -372,9 +437,9 @@ public class CaptureActivity extends AppCompatActivity implements SurfaceHolder.
                       value = new String(barcode.getRawBytes(), StandardCharsets.US_ASCII);
                     }
 
-                    data.putExtra(BarcodeFormat, barcode.getFormat());
-                    data.putExtra(BarcodeType, barcode.getValueType());
-                    data.putExtra(BarcodeValue, value);
+                    data.putExtra(BARCODE_FORMAT, barcode.getFormat());
+                    data.putExtra(BARCODE_TYPE, barcode.getValueType());
+                    data.putExtra(BARCODE_VALUE, value);
                     setResult(CommonStatusCodes.SUCCESS, data);
                     finish();
 
@@ -396,47 +461,47 @@ public class CaptureActivity extends AppCompatActivity implements SurfaceHolder.
 
     });
 
-    camera = cameraProvider.bindToLifecycle((LifecycleOwner) this, cameraSelector, imageAnalysis, preview);
+    camera = cameraProvider.bindToLifecycle((LifecycleOwner) this, cameraSelector,
+        imageAnalysis, preview);
   }
 
   /**
-   * For drawing the rectangular box
+   * For drawing the rectangular box.
+   * @param color color of the rectangle, specified as an integer in r,g,b,a format.
    */
-  private void DrawFocusRect(int color) {
+  private void drawFocusRect(int color) {
 
     if (mCameraView != null) {
       int height = mCameraView.getHeight();
       int width = mCameraView.getWidth();
 
-      int left, right, top, bottom, diameter;
+      int diameter = Math.min(height, width);
 
-      diameter = width;
-      if (height < width) {
-        diameter = height;
-      }
-
-      int offset = (int) ((1 - DetectorSize) * diameter);
+      int offset = (int) ((1 - detectorSize) * diameter);
       diameter -= offset;
 
-      canvas = holder.lockCanvas();
+      Canvas canvas = holder.lockCanvas();
       canvas.drawColor(0, PorterDuff.Mode.CLEAR);
       // border's properties
-      paint = new Paint();
+      Paint paint = new Paint();
       paint.setStyle(Paint.Style.STROKE);
       paint.setColor(color);
       paint.setStrokeWidth(5);
 
-      left = width / 2 - diameter / 2;
-      top = height / 2 - diameter / 2;
-      right = width / 2 + diameter / 2;
-      bottom = height / 2 + diameter / 2;
+      int left = width / 2 - diameter / 2;
+      int top = height / 2 - diameter / 2;
+      int right = width / 2 + diameter / 2;
+      int bottom = height / 2 + diameter / 2;
 
       // Changing the value of x in diameter/x will change the size of the box ;
       // inversely proportionate to x
-      if (DetectorSize <= 0.3) {
+      // If the detectorSize is 0.3 or less, then it is too small to make the rectangle rounded.
+      final double cutoff = 0.3;
+      if (detectorSize <= cutoff) {
         canvas.drawRect(new RectF(left, top, right, bottom), paint);
       } else {
-        canvas.drawRoundRect(new RectF(left, top, right, bottom), 100, 100, paint);
+        final float radius = 100;
+        canvas.drawRoundRect(new RectF(left, top, right, bottom), radius, radius, paint);
       }
 
       holder.unlockCanvasAndPost(canvas);

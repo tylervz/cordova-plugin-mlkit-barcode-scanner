@@ -29,42 +29,64 @@ import org.json.JSONObject;
 import java.io.IOException;
 
 /**
- * This class echoes a string called from JavaScript.
+ * Main Java class for the Cordova plugin. Handles all the JavaScript calls
+ * and launches the CaptureActivity for users to scan and detect barcodes
+ * with the Google ML Kit Vision library.
  */
 public class MLKitBarcodeScanner extends CordovaPlugin {
 
   private static final int RC_BARCODE_CAPTURE = 9001;
-  private CallbackContext _CallbackContext;
-  private Boolean _BeepOnSuccess;
-  private Boolean _VibrateOnSuccess;
-  private MediaPlayer _MediaPlayer;
-  private Vibrator _Vibrator;
+  private CallbackContext callbackContext;
+  private Boolean beepOnSuccess;
+  private Boolean vibrateOnSuccess;
+  private MediaPlayer mediaPlayer;
+  private Vibrator vibrator;
 
+  /**
+   * Initialize the Cordova plugin.
+   * @param cordova interface for the Cordova app
+   * @param webView the Cordova app web view
+   */
   public void initialize(CordovaInterface cordova, CordovaWebView webView) {
     super.initialize(cordova, webView);
 
     Context context = cordova.getContext();
 
-    _Vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
-    _MediaPlayer = new MediaPlayer();
+    vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+    mediaPlayer = new MediaPlayer();
 
     try {
       AssetFileDescriptor descriptor = context.getAssets().openFd("beep.ogg");
-      _MediaPlayer.setDataSource(descriptor.getFileDescriptor(), descriptor.getStartOffset(), descriptor.getLength());
+      mediaPlayer.setDataSource(descriptor.getFileDescriptor(),
+          descriptor.getStartOffset(), descriptor.getLength());
       descriptor.close();
-      _MediaPlayer.prepare();
+      mediaPlayer.prepare();
     } catch (IOException e) {
       e.printStackTrace();
     }
   }
 
+  /**
+   * This method gets called when our plugin's exec() JavaScript method of is called.
+   *
+   * @param action The action to execute.
+   * @param args The exec() arguments.
+   * @param cordovaCallbackContext The callback context used when calling back into JavaScript.
+   * @return Returns true when the action has been executed successfully. Returns false otherwise,
+   * resulting in a "MethodNotFound" error.
+   * @throws JSONException
+   */
   @Override
-  public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
-    Activity activity = cordova.getActivity();
-    Boolean hasCamera = activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY);
-    CameraManager cameraManager = (CameraManager) activity.getSystemService(Context.CAMERA_SERVICE);
+  public boolean execute(String action, JSONArray args, CallbackContext cordovaCallbackContext)
+      throws JSONException {
 
-    _CallbackContext = callbackContext;
+    Activity activity = cordova.getActivity();
+    Boolean hasCamera = activity.getPackageManager()
+        .hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY);
+    CameraManager cameraManager = (CameraManager) activity
+        .getSystemService(Context.CAMERA_SERVICE);
+
+    callbackContext = cordovaCallbackContext;
 
     int numberOfCameras = 0;
 
@@ -91,7 +113,7 @@ public class MLKitBarcodeScanner extends CordovaPlugin {
     }
 
     if (action.equals("startScan")) {
-      class OneShotTask implements Runnable {
+      final class OneShotTask implements Runnable {
         private final Context context;
         private final JSONArray args;
 
@@ -104,7 +126,8 @@ public class MLKitBarcodeScanner extends CordovaPlugin {
           try {
             openNewActivity(context, args);
           } catch (JSONException e) {
-            _CallbackContext.sendPluginResult(new PluginResult(PluginResult.Status.ERROR, e.toString()));
+            callbackContext.sendPluginResult(
+                new PluginResult(PluginResult.Status.ERROR, e.toString()));
           }
         }
       }
@@ -118,17 +141,25 @@ public class MLKitBarcodeScanner extends CordovaPlugin {
   private void openNewActivity(Context context, JSONArray args) throws JSONException {
     JSONObject config = args.getJSONObject(0);
     Intent intent = new Intent(context, CaptureActivity.class);
-    intent.putExtra("BarcodeFormats", config.optInt("barcodeFormats", 1234));
+    intent.putExtra("BarcodeFormats", config.optInt("barcodeFormats", 0));
     intent.putExtra("DetectorSize", config.optDouble("detectorSize", 0.5));
     intent.putExtra("RotateCamera", config.optBoolean("rotateCamera", false));
 
-    _BeepOnSuccess = config.optBoolean("beepOnSuccess", false);
-    _VibrateOnSuccess = config.optBoolean("vibrateOnSuccess", false);
+    beepOnSuccess = config.optBoolean("beepOnSuccess", false);
+    vibrateOnSuccess = config.optBoolean("vibrateOnSuccess", false);
 
     this.cordova.setActivityResultCallback(this);
     this.cordova.startActivityForResult(this, intent, RC_BARCODE_CAPTURE);
   }
 
+  /**
+   * This method is called once the CaptureActivity has finished.
+   * @param requestCode The request code originally supplied to startActivityForResult(),
+   * allowing you to identify who this result came from.
+   * @param resultCode the integer result code returned by the child activity
+   * through its setResult().
+   * @param data extra data returned by the CaptureActivity.
+   */
   @Override
   public void onActivityResult(int requestCode, int resultCode, Intent data) {
     super.onActivityResult(requestCode, resultCode, data);
@@ -136,26 +167,27 @@ public class MLKitBarcodeScanner extends CordovaPlugin {
     if (requestCode == RC_BARCODE_CAPTURE) {
       if (resultCode == CommonStatusCodes.SUCCESS) {
         if (data != null) {
-          Integer barcodeFormat = data.getIntExtra(CaptureActivity.BarcodeFormat, 0);
-          Integer barcodeType = data.getIntExtra(CaptureActivity.BarcodeType, 0);
-          String barcodeValue = data.getStringExtra(CaptureActivity.BarcodeValue);
+          Integer barcodeFormat = data.getIntExtra(CaptureActivity.BARCODE_FORMAT, 0);
+          Integer barcodeType = data.getIntExtra(CaptureActivity.BARCODE_TYPE, 0);
+          String barcodeValue = data.getStringExtra(CaptureActivity.BARCODE_VALUE);
           JSONArray result = new JSONArray();
           result.put(barcodeValue);
           result.put(barcodeFormat);
           result.put(barcodeType);
-          _CallbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, result));
+          callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, result));
 
-          if (_BeepOnSuccess) {
-            _MediaPlayer.start();
+          if (beepOnSuccess) {
+            mediaPlayer.start();
           }
 
-          if (_VibrateOnSuccess) {
-            Integer duration = 200;
+          if (vibrateOnSuccess) {
+            final Integer durationMilliseconds = 200;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-              _Vibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE));
+              vibrator.vibrate(VibrationEffect.createOneShot(
+                  durationMilliseconds, VibrationEffect.DEFAULT_AMPLITUDE));
             } else {
               // deprecated in API 26 aka Oreo
-              _Vibrator.vibrate(duration);
+              vibrator.vibrate(durationMilliseconds);
             }
           }
 
@@ -167,13 +199,22 @@ public class MLKitBarcodeScanner extends CordovaPlugin {
         result.put(err);
         result.put("");
         result.put("");
-        _CallbackContext.sendPluginResult(new PluginResult(PluginResult.Status.ERROR, result));
+        callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.ERROR, result));
       }
     }
   }
 
+  /**
+   * Called when the plugin is the recipient of an Activity result after the
+   * CordovaActivity has been destroyed. The Bundle will be the same as the one
+   * the plugin returned in onSaveInstanceState()
+   * @param state Bundle containing the state of the plugin.
+   * @param cordovaCallbackContext Replacement Context to return the plugin result to.
+   */
   @Override
-  public void onRestoreStateForActivityResult(Bundle state, CallbackContext callbackContext) {
-    _CallbackContext = callbackContext;
+  public void onRestoreStateForActivityResult(
+      Bundle state, CallbackContext cordovaCallbackContext) {
+
+    callbackContext = cordovaCallbackContext;
   }
 }
